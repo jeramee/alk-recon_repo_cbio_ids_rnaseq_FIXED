@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alk-recon"
+version = "0.1.0"
+description = "Research/education pipeline starter kit for ALK resistance mechanism dossiers"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "pandas>=2.0.0",
+  "numpy>=1.24.0",
+]
+
+[project.scripts]
+alk-recon = "alk_recon.cli:main"
+
+[tool.setuptools]
+packages = ["alk_recon", "schema", "ingest", "features", "mechanism_engine", "reports", "llm_layer"]

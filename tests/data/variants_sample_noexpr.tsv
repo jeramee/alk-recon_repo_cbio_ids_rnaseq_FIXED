@@ -1,0 +1,2 @@
+case_id	sample_id	gene	protein_change	variant_type	vaf	copy_number	fusion
+CASE_PERSIST	S1	ALK		FUSION			EML4-ALK

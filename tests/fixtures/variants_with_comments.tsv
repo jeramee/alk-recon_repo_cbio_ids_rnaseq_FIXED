@@ -1,0 +1,6 @@
+# Variant table template
+# Required columns: case_id, gene
+study_id	case_id	sample_id	timepoint_id	gene	protein_change	variant_type	vaf	copy_number	notes
+STUDY1	CASE_0001	S1	baseline	ALK	G1202R	SNV	0.22		
+STUDY1	CASE_0001	S1	baseline	MET		AMP		8	
+STUDY1	CASE_0002	S2	baseline	ALK	L1196M	SNV	0.10		

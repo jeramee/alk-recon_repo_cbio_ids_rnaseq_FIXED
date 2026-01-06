@@ -1,0 +1,4 @@
+sample_id	case_id	study_id	timepoint_id	condition
+SAMP_0001	CASE_0001	example_study	baseline	control
+SAMP_0002	CASE_0001	example_study	post_treatment	treated
+SAMP_0003	CASE_0002	example_study	baseline	control

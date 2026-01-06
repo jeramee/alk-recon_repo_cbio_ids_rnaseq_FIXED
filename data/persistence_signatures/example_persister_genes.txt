@@ -1,0 +1,21 @@
+# Example "persister / tolerance" gene list (research/education only)
+#
+# This is NOT a clinically validated signature.
+# Replace with your lab's chosen marker set(s) for your specific model system.
+#
+# Included as a default so the RNA-seq module can produce a working score out-of-the-box.
+AXL
+VIM
+ZEB1
+ITGA6
+NGFR
+ALDH1A1
+KRT19
+SLC2A1
+JUN
+FOS
+HSPA1A
+HSPB1
+SOD2
+CXCL8
+ICAM1

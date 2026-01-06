@@ -1,0 +1,23 @@
+# Minimal ctDNA/NGS variant table template for ALK-RECON
+# Save without the leading '#' lines.
+#
+# Required columns:
+#   - case_id
+#   - gene
+#
+# Strongly recommended:
+#   - sample_id
+#   - protein_change (e.g., G1202R)
+#   - variant_type (e.g., SNV, AMPLIFICATION, FUSION)
+#
+# Optional columns:
+#   - study_id  (cBioPortal studyId for traceability)
+#   - vaf
+#   - copy_number
+#   - fusion
+#   - timepoint_id
+#   - persister_score
+study_id	case_id	sample_id	timepoint_id	gene	protein_change	variant_type	vaf	copy_number	fusion	persister_score
+unspecified	CASE_0001	S1	baseline	ALK		FUSION			EML4-ALK	
+unspecified	CASE_0001	S1	progression_1	ALK	G1202R	SNV	0.22			
+unspecified	CASE_0001	S1	progression_1	MET		AMPLIFICATION		8		
