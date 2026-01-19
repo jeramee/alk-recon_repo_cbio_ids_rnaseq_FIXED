@@ -1,0 +1,212 @@
+{
+  "schema_version": "0.1.0",
+  "level": "timepoint",
+  "case_id": "CASE_PERSIST",
+  "study_id": "unspecified",
+  "patient_id": "CASE_PERSIST",
+  "sample_id": "S1",
+  "timepoint_id": "unspecified",
+  "collected_at_utc": null,
+  "genomic": {
+    "alk_fusion": "EML4-ALK",
+    "alk_variants": [],
+    "copy_number_events": [],
+    "bypass_events": [],
+    "flags": {
+      "has_any_alk_mutation": false,
+      "has_any_alk_variant": false,
+      "has_G1202R": false,
+      "has_L1196M": false,
+      "has_compound_alk_mutations": false,
+      "has_MET_amp": false,
+      "has_met_amp_or_high": false,
+      "has_met_alt": false,
+      "has_bypass_driver": false,
+      "has_bypass_event": false,
+      "has_persister_score": true,
+      "has_persister_score_high": false,
+      "persister_signature_score": 0.5892556509887897,
+      "persister_signature_score_high": false
+    }
+  },
+  "expression": {
+    "platform": "rnaseq_counts",
+    "contrast": null,
+    "signature_scores": {
+      "persister_score": 0.5892556509887897,
+      "signature_coverage": 0.8
+    },
+    "top_markers": [
+      {
+        "gene": "HSPA1A",
+        "z": 0.7071067811865489
+      },
+      {
+        "gene": "SLC2A1",
+        "z": 0.7071067811865481
+      },
+      {
+        "gene": "JUN",
+        "z": 0.7071067811865481
+      },
+      {
+        "gene": "ALDH1A1",
+        "z": 0.707106781186548
+      },
+      {
+        "gene": "NGFR",
+        "z": 0.7071067811865476
+      },
+      {
+        "gene": "FOS",
+        "z": 0.7071067811865476
+      },
+      {
+        "gene": "HSPB1",
+        "z": 0.7071067811865476
+      },
+      {
+        "gene": "AXL",
+        "z": 0.7071067811865475
+      },
+      {
+        "gene": "ZEB1",
+        "z": 0.7071067811865475
+      },
+      {
+        "gene": "VIM",
+        "z": 0.7071067811865471
+      }
+    ]
+  },
+  "clinical": {
+    "diagnosis": null,
+    "cancer_type": null,
+    "stage": null,
+    "age": null,
+    "sex": null,
+    "prior_alk_inhibitors": [],
+    "response_pattern": null,
+    "toxicity_constraints": []
+  },
+  "evidence": [
+    {
+      "id": "E1",
+      "level": "known",
+      "kind": "variant_row",
+      "label": "Variant table row: ALK",
+      "value": {
+        "gene": "ALK",
+        "fusion": "EML4-ALK"
+      },
+      "units": null,
+      "direction": null,
+      "confidence": null,
+      "provenance": {
+        "source": "local_file",
+        "source_id": "variant_table",
+        "fetched_at_utc": "2026-01-16T23:09:03Z",
+        "raw_ref": null
+      },
+      "notes": null
+    },
+    {
+      "id": "F_has_any_alk_mutation",
+      "level": "inferred",
+      "kind": "feature_flag",
+      "label": "Derived flag has_any_alk_mutation",
+      "value": false,
+      "units": null,
+      "direction": null,
+      "confidence": null,
+      "provenance": null,
+      "notes": null
+    },
+    {
+      "id": "F_has_G1202R",
+      "level": "inferred",
+      "kind": "feature_flag",
+      "label": "Derived flag has_G1202R",
+      "value": false,
+      "units": null,
+      "direction": null,
+      "confidence": null,
+      "provenance": null,
+      "notes": null
+    },
+    {
+      "id": "F_has_L1196M",
+      "level": "inferred",
+      "kind": "feature_flag",
+      "label": "Derived flag has_L1196M",
+      "value": false,
+      "units": null,
+      "direction": null,
+      "confidence": null,
+      "provenance": null,
+      "notes": null
+    },
+    {
+      "id": "F_has_compound_alk_mutations",
+      "level": "inferred",
+      "kind": "feature_flag",
+      "label": "Derived flag has_compound_alk_mutations",
+      "value": false,
+      "units": null,
+      "direction": null,
+      "confidence": null,
+      "provenance": null,
+      "notes": null
+    }
+  ],
+  "mechanism_calls": [
+    {
+      "mechanism": "on_target_alk",
+      "score": 0.0,
+      "rationale": "No ALK kinase-domain variant was detected in the provided variant table.",
+      "supporting_evidence_ids": [
+        "E1",
+        "F_has_any_alk_mutation",
+        "F_has_G1202R",
+        "F_has_L1196M",
+        "F_has_compound_alk_mutations"
+      ],
+      "contradicting_evidence_ids": []
+    },
+    {
+      "mechanism": "bypass",
+      "score": 0.0,
+      "rationale": "No obvious bypass-related alterations were detected in the provided variant table.",
+      "supporting_evidence_ids": [],
+      "contradicting_evidence_ids": []
+    },
+    {
+      "mechanism": "persistence",
+      "score": 0.0,
+      "rationale": "No expression-level persistence evidence was provided (expression block is missing).",
+      "supporting_evidence_ids": [],
+      "contradicting_evidence_ids": []
+    }
+  ],
+  "routing": {
+    "ranked_buckets": [
+      "E_sequencing_monitoring_logic"
+    ],
+    "what_to_test_next": [
+      "Acquire higher-yield evidence: ctDNA/tissue NGS for ALK mutations and key bypass events; optional expression signatures if available."
+    ],
+    "what_to_avoid": [
+      "Do not treat this as a clinical recommendation; this is a research summary of evidence."
+    ]
+  },
+  "tags": [
+    "ctDNA/NGS"
+  ],
+  "notes": null,
+  "provenance": {
+    "source": "local_file",
+    "source_id": "variant_table",
+    "fetched_at_utc": "2026-01-16T23:09:03Z",
+    "raw_ref": null
+  }
+}

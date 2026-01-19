@@ -1,0 +1,13 @@
+{
+  "cases": [
+    {
+      "case_id": "CASE_PERSIST",
+      "study_id": "unspecified",
+      "sample_id": "S1",
+      "timepoint_id": "unspecified",
+      "case_dir": "/mnt/data/patch_main4/-ALK-RECON_repo_cbio_ids_rnaseq-main/out/dossiers",
+      "dossier_md": "/mnt/data/patch_main4/-ALK-RECON_repo_cbio_ids_rnaseq-main/out/dossiers/CASE_PERSIST.dossier.md",
+      "snapshot_json": "/mnt/data/patch_main4/-ALK-RECON_repo_cbio_ids_rnaseq-main/out/dossiers/CASE_PERSIST.case_snapshot.json"
+    }
+  ]
+}
