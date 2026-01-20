@@ -1,66 +1,113 @@
-from __future__ import annotations
+"""Bypass-pathway flag computation.
 
-from typing import Any, Dict, List
+Tests rely on these keys:
+- has_MET_amp: True for MET amplification / AMP CNA events
+- has_bypass_driver: True when any bypass driver is present
+
+We keep the logic permissive because different ingest sources encode CNA/AMP
+in different fields.
+"""
+
+from __future__ import annotations
 
 from schema.case_snapshot import CaseSnapshot
 
-MAPK_GENES = {"KRAS", "NRAS", "BRAF", "MAP2K1", "MAP2K2"}
+# A lightweight set of common bypass drivers. This is not meant to be exhaustive.
+BYPASS_DRIVER_GENES = {
+    "MET",
+    "EGFR",
+    "ERBB2",
+    "HER2",
+    "KRAS",
+    "NRAS",
+    "BRAF",
+    "MAP2K1",
+    "PIK3CA",
+    "KIT",
+    "RET",
+    "ROS1",
+    "NTRK1",
+    "NTRK2",
+    "NTRK3",
+}
 
 
-def apply_bypass_flags(cs: CaseSnapshot) -> None:
-    flags: Dict[str, Any] = cs.flags
+def _is_amp_event(ev: dict) -> bool:
+    """Return True if a bypass/cna event looks like an amplification."""
+    effect = str(
+        ev.get("effect")
+        or ev.get("event_type")
+        or ev.get("type")
+        or ev.get("variant_type")
+        or ""
+    ).upper()
+    cn_raw = ev.get("copy_number") or ev.get("cn") or ""
+    cn = str(cn_raw).strip()
 
-    genes = [str(r.get("gene", "")).upper() for r in cs.variants]
-    vtypes = [str(r.get("variant_type", "")).upper() for r in cs.variants]
-    pcs = [str(r.get("protein_change", "")) for r in cs.variants]
+    if "AMP" in effect or "AMPL" in effect:
+        return True
 
-    def has_amp(gene: str) -> bool:
-        for r in cs.variants:
-            if str(r.get("gene", "")).upper() != gene:
-                continue
-            if str(r.get("variant_type", "")).upper() == "AMP":
-                return True
-            cn = r.get("copy_number", "")
-            try:
-                if cn and float(cn) >= 6:
-                    return True
-            except Exception:
-                pass
-        return False
+    if cn and cn.lower() not in {"nan", "none", "null"}:
+        # If a copy-number is present, treat it as a likely CNA event.
+        # Prefer a numeric threshold when possible.
+        try:
+            return float(cn) >= 6.0
+        except Exception:
+            return True
 
-    flags["has_met_event"] = has_amp("MET") or ("MET" in genes and "AMP" in vtypes)
-    flags["has_egfr_event"] = has_amp("EGFR") or ("EGFR" in genes and "AMP" in vtypes)
-    flags["has_mapk_event"] = any(g in MAPK_GENES for g in genes)
+    return False
 
-    flags["has_bypass_evidence"] = any([flags["has_met_event"], flags["has_egfr_event"], flags["has_mapk_event"]])
 
-    if flags["has_met_event"]:
-        cs.add_evidence(
-            layer="KNOWN",
-            feature_name="has_met_event",
-            feature_value=True,
-            source_type="variants",
-            source_ref="variant_table",
-            gene="MET",
-            note="MET event detected (AMP or high copy_number).",
-        )
-    if flags["has_egfr_event"]:
-        cs.add_evidence(
-            layer="KNOWN",
-            feature_name="has_egfr_event",
-            feature_value=True,
-            source_type="variants",
-            source_ref="variant_table",
-            gene="EGFR",
-            note="EGFR event detected (AMP or high copy_number).",
-        )
-    if flags["has_mapk_event"]:
-        cs.add_evidence(
-            layer="INFERRED",
-            feature_name="has_mapk_event",
-            feature_value=True,
-            source_type="variants",
-            source_ref="variant_table",
-            gene="MAPK",
-            note="MAPK pathway gene event present (e.g., KRAS/BRAF/MAP2K1...).",
-        )
+def apply_bypass_flags(cs: CaseSnapshot) -> CaseSnapshot:
+    """Update cs.genomic.flags with bypass-driver booleans."""
+    if cs.genomic is None:
+        return cs
+
+    flags = dict(cs.genomic.flags or {})
+
+    bypass_events = list(cs.genomic.bypass_events or [])
+    cna_events = list(getattr(cs.genomic, "copy_number_events", []) or [])
+
+    has_met_amp = False
+    for ev in bypass_events:
+        gene = str(ev.get("gene") or "").upper()
+        if gene == "MET" and _is_amp_event(ev):
+            has_met_amp = True
+            break
+
+    if not has_met_amp:
+        for ev in cna_events:
+            gene = str(ev.get("gene") or "").upper()
+            if gene == "MET" and _is_amp_event(ev):
+                has_met_amp = True
+                break
+
+    flags["has_MET_amp"] = has_met_amp
+
+    # Compatibility aliases used by the rule engine
+    flags["has_met_amp_or_high"] = has_met_amp
+    flags["has_met_alt"] = has_met_amp
+
+    has_bypass_driver = False
+    for ev in bypass_events:
+        gene = str(ev.get("gene") or "").upper()
+        if gene in BYPASS_DRIVER_GENES:
+            has_bypass_driver = True
+            break
+
+    if not has_bypass_driver:
+        for ev in cna_events:
+            gene = str(ev.get("gene") or "").upper()
+            if gene in BYPASS_DRIVER_GENES:
+                has_bypass_driver = True
+                break
+
+    flags["has_bypass_driver"] = bool(has_bypass_driver or has_met_amp)
+    # Back-compat naming used elsewhere
+    flags.setdefault("has_bypass_event", bool(bypass_events or cna_events))
+
+    # Existing semantic flag (kept for backward compatibility)
+    flags.setdefault("has_bypass_event", bool(bypass_events or cna_events))
+
+    cs.genomic.flags = flags
+    return cs

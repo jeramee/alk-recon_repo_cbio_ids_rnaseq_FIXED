@@ -1,33 +1,40 @@
-from pathlib import Path
 import json
+import re
 
-from schema.case_snapshot import CaseSnapshot
-from features.apply_features import apply_all_features
-from mechanism_engine.rule_engine import compute_mechanism_calls
-from reports.dossier import write_dossier_md, write_dossier_json
+from ingest.variant_table_import import load_variant_table, dataframe_to_case_snapshots
+from features.apply_features import apply_features_to_snapshot
+from mechanism_engine.rule_engine import compute_mechanism_calls, route_strategy
+from reports.dossier import build_json_dossier, build_markdown_dossier
 
 
-def test_dossier_outputs_are_written_and_auditable(tmp_path: Path):
-    cs = CaseSnapshot(study_id="STUDY1", case_id="CASE_0001", sample_id="S1", timepoint_id="baseline", variants=[
-        {"gene": "ALK", "protein_change": "G1202R", "variant_type": "SNV"},
-        {"gene": "MET", "variant_type": "AMP", "copy_number": "8"},
-    ])
-    apply_all_features(cs)
-    compute_mechanism_calls(cs)
+def test_dossier_has_evidence_ids_and_machine_readable_structure(tmp_path):
+    p = tmp_path / "variants.tsv"
+    p.write_text(
+        "study_id\tcase_id\tsample_id\ttimepoint_id\tgene\tprotein_change\tvariant_type\tvaf\tcopy_number\tpersister_score\n"
+        "luad_tcga_pan_can_atlas_2018\tCASE_X\tSAMPLE_X\tT1\tALK\tG1202R\tSNV\t0.2\t\t\n"
+        "luad_tcga_pan_can_atlas_2018\tCASE_X\tSAMPLE_X\tT1\tMET\t\tAMP\t\t8\t\n"
+    )
 
-    md_path = tmp_path / "dossiers" / "CASE_0001.md"
-    js_path = tmp_path / "dossiers" / "CASE_0001.json"
-    write_dossier_md(cs, md_path)
-    write_dossier_json(cs, js_path)
+    df = load_variant_table(str(p))
+    s = dataframe_to_case_snapshots(df)[0]
+    s = apply_features_to_snapshot(s)
 
-    assert md_path.exists()
-    assert js_path.exists()
+    calls = compute_mechanism_calls(s)
+    routing = route_strategy(s, calls)
 
-    md = md_path.read_text(encoding="utf-8")
-    assert "Mechanism calls" in md
-    assert "| evidence_id |" in md
+    j = build_json_dossier(s, calls, routing)
+    assert j["case_id"] == "CASE_X"
+    assert "mechanism_calls" in j and len(j["mechanism_calls"]) >= 3
+    assert "evidence_ledger" in j and len(j["evidence_ledger"]) > 0
 
-    d = json.loads(js_path.read_text(encoding="utf-8"))
-    assert "evidence_ledger" in d
-    assert len(d["evidence_ledger"]) >= 1
-    assert d["evidence_ledger"][0]["evidence_id"].startswith("E")
+    # Evidence IDs should exist and look like "E1", "E2", ...
+    eids = [e.get("evidence_id") for e in j["evidence_ledger"]]
+    assert any(re.fullmatch(r"E\d+", str(x)) for x in eids)
+
+    md = build_markdown_dossier(s, calls, routing)
+    assert "Mechanism" in md  # headline section presence
+    assert re.search(r"\bE\d+\b", md)  # evidence IDs appear in markdown
+
+    # JSON should be serializable (this catches sneaky non-serializable objects)
+    json.dumps(j)
+

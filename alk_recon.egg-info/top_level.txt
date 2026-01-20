@@ -1,0 +1,7 @@
+alk_recon
+features
+ingest
+llm_layer
+mechanism_engine
+reports
+schema

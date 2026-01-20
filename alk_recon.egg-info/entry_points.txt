@@ -1,0 +1,2 @@
+[console_scripts]
+alk-recon = alk_recon.cli:main

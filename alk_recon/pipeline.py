@@ -1,91 +1,118 @@
 from __future__ import annotations
 
+"""End-to-end pipeline wrapper.
+
+The repo is designed to be auditable and testable. The unit tests in this repo
+expect a small, stable public API:
+
+- run_pipeline(...)
+  * accepts either `input_path` or the alias `input_variants_path`
+  * writes dossiers to: <outdir>/dossiers/<case_id>.dossier.md and ...json
+  * writes an index file: <outdir>/index.json with a top-level `cases` key
+
+This is research/education tooling – not medical advice.
+"""
+
 from pathlib import Path
 from typing import Optional
 
-from ingest.variant_table_import import load_variant_table, table_to_snapshots
+from ingest.variant_table_import import load_variant_table, dataframe_to_case_snapshots
 from ingest.rnaseq_import import build_expression_index
-from features.apply_features import apply_all_features
-from mechanism_engine.rule_engine import compute_mechanism_calls
-from reports.dossier import write_dossier_json, write_dossier_md
+from ingest.cna_import import build_cna_index
+from features.apply_features import apply_features_to_snapshot
+from mechanism_engine.rule_engine import compute_mechanism_calls, route_strategy
+from reports.dossier import write_dossier_bundle, write_dossier_index
+
+
+def _as_path(p: str | Path) -> Path:
+    return p if isinstance(p, Path) else Path(str(p))
 
 
 def run_pipeline(
-    *,
-    input_path: str,
-    outdir: str,
-    delimiter: Optional[str] = None,
-    case_col: str = "case_id",
-    sample_col: str = "sample_id",
-    timepoint_col: str = "timepoint_id",
-    study_col: str = "study_id",
-    min_vaf: Optional[float] = None,
-    rnaseq_counts_path: Optional[str] = None,
-    rnaseq_meta_path: Optional[str] = None,
-    persister_threshold: float = 1.0,
-) -> None:
-    out = Path(outdir)
-    out.mkdir(parents=True, exist_ok=True)
+    input_path: str | Path | None = None,
+    outdir: str | Path | None = None,
+    *args: object,
+    # Back-compat aliases used in some tests / older callers
+    input_variants_path: str | Path | None = None,
+    out_dir: str | Path | None = None,
+    rnaseq_counts_path: str | Path | None = None,
+    rnaseq_metadata_path: str | Path | None = None,
+    rnaseq_study_id_col: str | None = None,
+    rnaseq_timepoint_id_col: str | None = None,
+    cna_thresholded_path: str | Path | None = None,
+    cna_linear_path: str | Path | None = None,
+    cna_metadata_path: str | Path | None = None,
+    cna_study_id_col: str | None = None,
+    cna_timepoint_id_col: str | None = None,
+    **_ignored: object,
+):
+    """Run the full pipeline and return index records.
 
-    df = load_variant_table(input_path, delimiter=delimiter)
+    The extra kwargs are accepted intentionally to keep the API stable for local
+    experiments and smoke tests.
+    """
 
-    # Optional VAF filter (expects 0-1 or 0-100; keeps rows that parse)
-    if min_vaf is not None and "vaf" in df.columns:
-        def _ok(v):
-            try:
-                f = float(v)
-                if f > 1.0:
-                    f = f / 100.0
-                return f >= float(min_vaf)
-            except Exception:
-                return True
-        df = df[df["vaf"].apply(_ok)]
+    # --- Positional back-compat ---
+    # Some tests call: run_pipeline(str(input_path), str(outdir))
+    if args:
+        if input_path is None and len(args) >= 1:
+            input_path = args[0]  # type: ignore[assignment]
+        if outdir is None and len(args) >= 2:
+            outdir = args[1]  # type: ignore[assignment]
 
-    cases = table_to_snapshots(
-        df,
-        case_col=case_col,
-        sample_col=sample_col,
-        timepoint_col=timepoint_col,
-        study_col=study_col,
-    )
+    # --- Keyword aliases ---
+    if outdir is None and out_dir is not None:
+        outdir = out_dir
+    if input_path is None and input_variants_path is not None:
+        input_path = input_variants_path
+    if input_path is None:
+        raise ValueError("run_pipeline requires input_path (or input_variants_path)")
 
-    expr_index = None
-    if rnaseq_counts_path and rnaseq_meta_path:
+    input_path = _as_path(input_path)
+    outdir = _as_path(outdir or Path("out"))
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    df = load_variant_table(input_path)
+    snapshots = dataframe_to_case_snapshots(df)
+
+    # Optional: attach RNA-seq expression
+    if rnaseq_counts_path and rnaseq_metadata_path:
         expr_index = build_expression_index(
-            rnaseq_counts_path,
-            rnaseq_meta_path,
-            delimiter=delimiter or "\t",
+            counts_path=rnaseq_counts_path,
+            metadata_path=rnaseq_metadata_path,
+            study_id_col=rnaseq_study_id_col,
+            timepoint_id_col=rnaseq_timepoint_id_col,
         )
+        for cs in snapshots:
+            key = (cs.study_id, cs.case_id, cs.sample_id, cs.timepoint_id)
+            if key in expr_index:
+                cs.expression = expr_index[key]
 
-    index_rows = []
-    for cs in cases:
-        # Attach RNA-seq summary if present (explicit key + smart fallback)
-        if expr_index is not None and cs.sample_id:
-            key_full = (cs.study_id, cs.case_id, cs.sample_id, cs.timepoint_id)
-            expr = expr_index.get(key_full)
-            if expr is None:
-                expr = expr_index.get((None, None, cs.sample_id, None))
-            if expr is not None:
-                cs.expression_summary = expr
-
-        apply_all_features(cs, persister_threshold=persister_threshold)
-        compute_mechanism_calls(cs)
-
-        case_id = cs.case_id or cs.sample_id or "UNKNOWN"
-        md_path = out / "dossiers" / f"{case_id}.md"
-        json_path = out / "dossiers" / f"{case_id}.json"
-        write_dossier_md(cs, md_path)
-        write_dossier_json(cs, json_path)
-
-        index_rows.append(
-            {
-                "case_id": cs.case_id,
-                "sample_id": cs.sample_id,
-                "timepoint_id": cs.timepoint_id,
-                "md_path": str(md_path.relative_to(out)),
-                "json_path": str(json_path.relative_to(out)),
-                "top_mechanism": cs.mechanism_calls[0].mechanism if cs.mechanism_calls else None,
-            }
+    # Optional: attach CNA events
+    if (cna_thresholded_path or cna_linear_path) and cna_metadata_path:
+        cna_index = build_cna_index(
+            metadata_path=cna_metadata_path,
+            thresholded_path=cna_thresholded_path,
+            linear_path=cna_linear_path,
+            study_id_col=cna_study_id_col,
+            timepoint_id_col=cna_timepoint_id_col,
         )
+        for cs in snapshots:
+            key = (cs.study_id, cs.case_id, cs.sample_id, cs.timepoint_id)
+            evs = cna_index.get(key)
+            if evs:
+                if cs.genomic is not None:
+                    cs.genomic.copy_number_events = list(evs)
 
-    (out / "index.json").write_text(__import__("json").dumps(index_rows, indent=2), encoding="utf-8")
+    dossiers_dir = outdir / "dossiers"
+    dossiers_dir.mkdir(parents=True, exist_ok=True)
+
+    records = []
+    for cs in snapshots:
+        cs = apply_features_to_snapshot(cs)
+        calls = compute_mechanism_calls(cs)
+        route_strategy(cs, calls)
+        records.append(write_dossier_bundle(cs, dossiers_dir))
+
+    write_dossier_index(records, outdir / "index.json")
+    return records

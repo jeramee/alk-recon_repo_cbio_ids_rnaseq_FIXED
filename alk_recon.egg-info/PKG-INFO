@@ -1,3 +1,13 @@
+Metadata-Version: 2.4
+Name: alk-recon
+Version: 0.1.0
+Summary: Research/education pipeline starter kit for ALK resistance mechanism dossiers
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: pandas>=2.0.0
+Dynamic: license-file
+
 # ALK-RECON
 
 **ALK-RECON** is a research / education pipeline that converts ALK-related

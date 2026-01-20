@@ -1,53 +1,49 @@
-"""Persistence / tolerance flags.
+"""Persistence/tolerance flag computation.
 
-This module stays deliberately simple for the MVP:
-- It looks for an expression_summary on the CaseSnapshot.
-- It derives boolean flags used by the rule engine.
+The ingest layer can attach a persister_score into:
+  cs.expression.signature_scores["persister_score"]
 
-Terminology:
-- persister_signature_score: numeric score (higher == more 'persister-like')
-- has_expression_data: we have any RNA/expression attached
-- has_persister_score_high: score >= threshold (default 1.0)
+Tests rely on:
+- has_persister_score
+- has_persister_score_high
+
+We also keep older keys for back-compat.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict
-
 from schema.case_snapshot import CaseSnapshot
 
 
-def apply_persistence_flags(cs: CaseSnapshot, *, threshold: float = 1.0) -> None:
-    """Attach persistence-related flags to cs.flags in-place.
+def _extract_persister_score(cs: CaseSnapshot):
+    if not cs.expression or not cs.expression.signature_scores:
+        return None
+    # be permissive about casing
+    for k, v in cs.expression.signature_scores.items():
+        if str(k).lower() == "persister_score":
+            try:
+                return float(v)
+            except Exception:
+                return None
+    return None
 
-    Backwards-compatible: we also set older flag names if they exist in downstream code.
-    """
-    flags: Dict[str, Any] = cs.flags
 
-    expr = cs.expression_summary or {}
-    # If expression_summary is absent/empty, mark as no expression evidence.
-    if not isinstance(expr, dict) or len(expr) == 0:
-        flags.setdefault("has_expression_data", False)
-        flags.setdefault("has_persister_score_high", False)
-        # legacy names
-        flags.setdefault("has_persistence_evidence", False)
-        flags.setdefault("persister_signature_score_high", False)
-        return
+def apply_persistence_flags(cs: CaseSnapshot, high_threshold: float = 2.0) -> CaseSnapshot:
+    if cs.genomic is None:
+        return cs
 
-    flags["has_expression_data"] = True
-    flags["has_persistence_evidence"] = True  # legacy-friendly umbrella
+    flags = dict(cs.genomic.flags or {})
 
-    score = expr.get("persister_signature_score")
-    try:
-        score_f = float(score) if score is not None else None
-    except Exception:
-        score_f = None
+    score = _extract_persister_score(cs)
+    has_score = score is not None
+    is_high = bool(has_score and score >= float(high_threshold))
 
-    if score_f is None:
-        flags["has_persister_score_high"] = False
-        flags["persister_signature_score_high"] = False  # legacy
-        return
+    flags["has_persister_score"] = has_score
+    flags["has_persister_score_high"] = is_high
 
-    flags["persister_signature_score"] = score_f  # convenience mirror
-    flags["has_persister_score_high"] = score_f >= float(threshold)
-    flags["persister_signature_score_high"] = flags["has_persister_score_high"]  # legacy
+    # older keys (keep them if downstream uses them)
+    flags["persister_signature_score"] = score if has_score else None
+    flags["persister_signature_score_high"] = is_high
+
+    cs.genomic.flags = flags
+    return cs
