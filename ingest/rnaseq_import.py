@@ -23,7 +23,6 @@ Metadata (CSV/TSV):
 This module is not medical advice and is not intended for clinical use.
 """
 
-from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Tuple
 
@@ -31,18 +30,7 @@ import numpy as np
 import pandas as pd
 
 from schema.case_snapshot import ExpressionSummary
-import math
-...
-top = []
-for gene, val in vec.items():
-    try:
-        f = float(val)
-    except:
-        continue
-    if math.isfinite(f):
-        top.append((gene, f))
 
-top = sorted(top, key=lambda x: x[1], reverse=True)[:top_n]
 
 def _read_table(path: str | Path) -> pd.DataFrame:
     path = Path(path)

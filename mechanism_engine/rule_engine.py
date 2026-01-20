@@ -10,20 +10,6 @@ from schema.case_snapshot import (
     StrategyRouting,
 )
 
-on_target_score = 0.0
-bypass_score = 0.0
-persistence_score = 0.0
-
-if flags.get("has_any_alk_variant") or flags.get("has_any_alk_mutation"):
-    on_target_score = 0.5
-
-if flags.get("has_MET_amp") or flags.get("has_any_bypass_event"):
-    bypass_score = 0.6
-
-if flags.get("has_persister_score_high"):
-    persistence_score = 0.6
-
-
 def _score_on_target(cs):
     """
     Minimal scorer. Returns a plain dict (no new types).
@@ -130,20 +116,23 @@ def score_mechanisms_and_route(cs: CaseSnapshot) -> CaseSnapshot:
 
     flags = cs.genomic.flags or {}
 
+    has_alk = flags.get("has_any_alk_mutation") or flags.get("has_alk_fusion")
+
     # --- Mechanism scoring (0..1, heuristic) ---
+    calls = []
     on_target = 0.0
     bypass = 0.0
     persistence = 0.0
 
-    # On-target ALK evidence
-    if flags.get("has_any_alk_mutation"):
-        on_target += 0.40
-    if flags.get("has_G1202R"):
-        on_target += 0.35
-    if flags.get("has_L1196M"):
-        on_target += 0.25
-    if flags.get("has_compound_alk_mutations"):
-        on_target += 0.35
+    if has_alk:
+        if flags.get("has_any_alk_mutation"):
+            on_target += 0.40
+        if flags.get("has_G1202R"):
+            on_target += 0.35
+        if flags.get("has_L1196M"):
+            on_target += 0.25
+        if flags.get("has_compound_alk_mutations"):
+            on_target += 0.35
 
     # Bypass evidence
     if flags.get("has_any_bypass_event"):
@@ -166,46 +155,46 @@ def score_mechanisms_and_route(cs: CaseSnapshot) -> CaseSnapshot:
     bypass = min(1.0, bypass)
     persistence = min(1.0, persistence)
 
-    # Build calls (ranked)
-    calls = []
-    calls.append(
+    # --- Build calls ---
+    calls = [
         MechanismCall(
             mechanism=MechanismType.ON_TARGET_ALK,
             score=on_target,
             rationale=_rationale_on_target(cs),
             supporting_evidence_ids=_supporting_evidence_ids(cs, "on_target_alk"),
             contradicting_evidence_ids=[],
-        )
-    )
-    calls.append(
+        ),
         MechanismCall(
             mechanism=MechanismType.BYPASS,
             score=bypass,
             rationale=_rationale_bypass(cs),
             supporting_evidence_ids=_supporting_evidence_ids(cs, "bypass"),
             contradicting_evidence_ids=[],
-        )
-    )
-    calls.append(
+        ),
         MechanismCall(
             mechanism=MechanismType.PERSISTENCE,
             score=persistence,
             rationale=_rationale_persistence(cs),
             supporting_evidence_ids=_supporting_evidence_ids(cs, "persistence"),
             contradicting_evidence_ids=[],
-        )
-    )
+        ),
+    ]
 
-    calls_sorted = sorted(calls, key=lambda c: c.score, reverse=True)
-    cs.mechanism_calls = calls_sorted
+    # ✅ Keep full call set for auditability
+    calls_all = calls[:]
 
+    # ✅ Ranked view for routing / "top" logic
+    calls_ranked = sorted(calls_all, key=lambda c: c.score, reverse=True)
+
+    cs.mechanism_calls = calls_all
     cs.routing = _route(cs)
     return cs
 
 
 def _route(cs: CaseSnapshot) -> StrategyRouting:
     flags = cs.genomic.flags or {}
-    top = cs.mechanism_calls[0] if cs.mechanism_calls else None
+    calls = cs.mechanism_calls or []
+    top = max(calls, key=lambda c: c.score) if calls else None
 
     ranked: list[StrategyBucket] = []
     what_to_test: list[str] = []
@@ -321,29 +310,27 @@ def _supporting_evidence_ids(cs: CaseSnapshot, mechanism: str) -> list[str]:
 def compute_mechanism_calls(cs: CaseSnapshot):
     """
     Compatibility wrapper for older tests.
-    Ensures cs.mechanism_calls is populated and returns it.
     """
     score_mechanisms_and_route(cs)
     return cs.mechanism_calls or []
 
 
-def route_strategy(cs: CaseSnapshot, calls=None):
-    """Compatibility wrapper.
-
-    Some tests call route_strategy(cs, calls).
-    Internally we route based on cs.mechanism_calls.
+def route_strategy(snapshot: CaseSnapshot, calls=None):
     """
-    if calls is not None:
-        cs.mechanism_calls = list(calls)
+    Backwards-compatible wrapper.
+    Tests expect route_strategy(snapshot, calls) -> list[StrategyBucket].
+    """
+    # Ensure routing exists
+    if getattr(snapshot, "routing", None) is None:
+        score_mechanisms_and_route(snapshot)
 
-    # If no calls provided, compute them.
-    if not getattr(cs, "mechanism_calls", None):
-        cs.mechanism_calls = compute_mechanism_calls(cs)
+    routing = snapshot.routing
+    if routing is None:
+        return []
 
-    # Ensure ranked best-to-worst.
-    cs.mechanism_calls = sorted(cs.mechanism_calls, key=lambda c: c.score, reverse=True)
+    return list(routing.ranked_buckets)
 
-    cs.routing = _route(cs)
-    return cs.routing
+
+
 
 
